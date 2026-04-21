@@ -8,6 +8,8 @@
 
 **[pkg.go.dev/github.com/eslider/go-xls](https://pkg.go.dev/github.com/eslider/go-xls)** (module index) · **[pkg.go.dev/…/v2](https://pkg.go.dev/github.com/eslider/go-xls/v2)** (this major version’s `xls` package)
 
+If those pages show *Not Found* right after a release, wait a few minutes for pkg.go.dev to index, or run `go doc github.com/eslider/go-xls/v2`. The module resolves from the proxy (`go get github.com/eslider/go-xls/v2@v2.0.1`).
+
 Small, **`io.Writer` / `io.Reader`–first** helpers for tabular data: UTF‑16LE CSV (BOM + `sep=`), legacy binary **.xls** (linear BIFF), GitHub-style **markdown pipe tables**, and optional HTTP attachment headers.
 
 ## Install
