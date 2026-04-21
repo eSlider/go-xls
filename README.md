@@ -77,6 +77,14 @@ func main() {
 - **`ParseXLSToMaps(b)`** is shorthand for `ParseXLS(b, true)` then each data row as `map[string]string` (duplicate header names: last column wins).
 - **OLE workbooks** (typical Excel 97 `.xls` with magic `D0 CF 11 E0`) return `ErrOLEWorkbook`. Tools such as [northbright/xls2csv-go](https://github.com/northbright/xls2csv-go) use **libxls** for that container; this package intentionally matches only the Mapbender/minimal writer stream.
 
+## Markdown pipe tables
+
+GitHub-style **pipe tables** (header + `|---|` divider + body) can be converted without templates (unlike [moul/mdtable](https://github.com/moul/mdtable), which uses `text/tabwriter` + `text/template` for arbitrary layouts):
+
+- **`MarshalMarkdownTable` / `MarshalMarkdownTableWith`** — from `Table`; escapes `\`, `|`, and newlines in cells.
+- **`UnmarshalMarkdownTable`** — finds the first valid table in a string (prose before it is ignored).
+- **`UnmarshalMarkdownTableDetailed`** — same as above plus per-column `MarkdownAlign` from the divider row for lossless alignment round-trips with `MarshalMarkdownTableWith`.
+
 ## Behaviour notes
 
 - **Table**: columns are explicit and stable (Go has no PHP ordered-map iteration). If `Columns` is empty, synthetic names `0`, `1`, … are derived from the widest row, matching numeric-key tables in Mapbender.
