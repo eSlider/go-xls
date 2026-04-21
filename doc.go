@@ -4,4 +4,7 @@
 // Module index: https://pkg.go.dev/github.com/eslider/go-xls
 //
 // API for this major version: https://pkg.go.dev/github.com/eslider/go-xls/v2
+//
+// Low-level wire constants: [github.com/eslider/go-xls/v2/biff] (BIFF opcodes and cell layout) and
+// [github.com/eslider/go-xls/v2/ole] (compound file magic).
 package xls

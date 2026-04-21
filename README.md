@@ -8,7 +8,7 @@
 
 **[pkg.go.dev/github.com/eslider/go-xls](https://pkg.go.dev/github.com/eslider/go-xls)** (module index) · **[pkg.go.dev/…/v2](https://pkg.go.dev/github.com/eslider/go-xls/v2)** (this major version’s `xls` package)
 
-If those pages show *Not Found* right after a release, wait a few minutes for pkg.go.dev to index, or run `go doc github.com/eslider/go-xls/v2`. The module resolves from the proxy (`go get github.com/eslider/go-xls/v2@v2.0.2`).
+If those pages show *Not Found* right after a release, wait a few minutes for pkg.go.dev to index, or run `go doc github.com/eslider/go-xls/v2`. The module resolves from the proxy (`go get github.com/eslider/go-xls/v2@v2.1.0`).
 
 Small, **`io.Writer` / `io.Reader`–first** helpers for tabular data: UTF‑16LE CSV (BOM + `sep=`), legacy binary **.xls** (linear BIFF), GitHub-style **markdown pipe tables**, and optional HTTP attachment headers.
 
@@ -24,8 +24,8 @@ Documentation follows [Adding a package](https://pkg.go.dev/about#adding-a-packa
 
 To **add or refresh** a version on pkg.go.dev after you push a tag, use any one of these (per the [official how-to](https://pkg.go.dev/about#adding-a-package)):
 
-1. **`go get`** (simplest): `GOPROXY=https://proxy.golang.org GO111MODULE=on go get github.com/eslider/go-xls/v2@v2.0.2`
-2. **Proxy `.info` URL** (Module proxy protocol): `https://proxy.golang.org/github.com/eslider/go-xls/v2/@v/v2.0.2.info`
+1. **`go get`** (simplest): `GOPROXY=https://proxy.golang.org GO111MODULE=on go get github.com/eslider/go-xls/v2@v2.1.0`
+2. **Proxy `.info` URL** (Module proxy protocol): `https://proxy.golang.org/github.com/eslider/go-xls/v2/@v/v2.1.0.info`
 3. **Request button** in the browser on the [module](https://pkg.go.dev/github.com/eslider/go-xls) or [package](https://pkg.go.dev/github.com/eslider/go-xls/v2) page, if the UI offers it.
 
 New versions are picked up from [index.golang.org](https://index.golang.org/) within a few minutes. For writing docs, follow [Godoc documenting Go code](https://go.dev/blog/godoc) (the first sentence of the package comment is what search indexes).
@@ -33,10 +33,8 @@ New versions are picked up from [index.golang.org](https://index.golang.org/) wi
 ## Install
 
 ```bash
-go get github.com/eslider/go-xls/v2@v2.0.2
+go get github.com/eslider/go-xls/v2@v2.1.0
 ```
-
-The string **`xls.Version`** matches this release (`2.0.2`). Git tags use a `v` prefix (`v2.0.2`); keep the const and tag in sync when publishing.
 
 **Module path:** `github.com/eslider/go-xls/v2` (Go semantic import versioning for v2+).
 
@@ -57,7 +55,7 @@ if err := xls.WriteXLS(&buf, tab, true); err != nil {
 
 ## Read legacy `.xls`
 
-Linear BIFF only (record types `BIFFRecordBOF`, `BIFFRecordString`, `BIFFRecordNumber`, `BIFFRecordEOF` in [package documentation](https://pkg.go.dev/github.com/eslider/go-xls/v2#pkg-constants)). OLE compound workbooks (magic `D0 CF 11 E0 …`) return `xls.ErrOLEWorkbook` — use another reader for those files.
+Linear BIFF only (see [`biff` record opcodes](https://pkg.go.dev/github.com/eslider/go-xls/v2/biff#pkg-constants): `biff.RecordBOF`, `biff.RecordString`, `biff.RecordNumber`, `biff.RecordEOF`). OLE compound workbooks (magic `D0 CF 11 E0 …`) return `xls.ErrOLEWorkbook` — use another reader for those files; the signature is [`ole.HeaderPrefix`](https://pkg.go.dev/github.com/eslider/go-xls/v2/ole#pkg-variables).
 
 ```go
 tab, err := xls.ReadXLS(bytes.NewReader(buf.Bytes()), true)

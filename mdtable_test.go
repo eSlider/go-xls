@@ -6,7 +6,35 @@ import (
 	"testing"
 )
 
-func TestMarkdownRoundTrip(t *testing.T) {
+// mustRoundTripMarkdown writes want with [WriteMarkdownTable], then [ReadMarkdownTable].
+func mustRoundTripMarkdown(t *testing.T, want Table) Table {
+	t.Helper()
+	var w bytes.Buffer
+	if err := WriteMarkdownTable(&w, want); err != nil {
+		t.Fatalf("WriteMarkdownTable: %v", err)
+	}
+	got, err := ReadMarkdownTable(bytes.NewReader(w.Bytes()))
+	if err != nil {
+		t.Fatalf("ReadMarkdownTable: %v", err)
+	}
+	return got
+}
+
+// mustRoundTripMarkdownWith writes with [WriteMarkdownTableWith], then [ReadMarkdownTableDetailed].
+func mustRoundTripMarkdownWith(t *testing.T, tab Table, opts MarkdownMarshalOpts) (Table, []MarkdownAlign) {
+	t.Helper()
+	var w bytes.Buffer
+	if err := WriteMarkdownTableWith(&w, tab, opts); err != nil {
+		t.Fatalf("WriteMarkdownTableWith: %v", err)
+	}
+	gotTab, gotAlign, err := ReadMarkdownTableDetailed(bytes.NewReader(w.Bytes()))
+	if err != nil {
+		t.Fatalf("ReadMarkdownTableDetailed: %v", err)
+	}
+	return gotTab, gotAlign
+}
+
+func TestMarkdown_RoundTrip_Basic(t *testing.T) {
 	want := Table{
 		Columns: []string{"name", "qty"},
 		Rows: [][]string{
@@ -14,72 +42,51 @@ func TestMarkdownRoundTrip(t *testing.T) {
 			{"banana", "x"},
 		},
 	}
-	var w bytes.Buffer
-	if err := WriteMarkdownTable(&w, want); err != nil {
-		t.Fatal(err)
-	}
-	got, err := ReadMarkdownTable(bytes.NewReader(w.Bytes()))
-	if err != nil {
-		t.Fatal(err)
-	}
+	got := mustRoundTripMarkdown(t, want)
 	if !tablesEqual(got, want) {
-		t.Fatalf("got %#v want %#v\n--- md ---\n%s", got, want, w.String())
+		t.Fatalf("write→read mismatch\ngot:  %#v\nwant: %#v", got, want)
 	}
 }
 
-func TestMarkdownPipeInCell(t *testing.T) {
+func TestMarkdown_RoundTrip_PipeInCell(t *testing.T) {
 	want := Table{
 		Columns: []string{"a"},
 		Rows:    [][]string{{"p|q"}},
 	}
-	var w bytes.Buffer
-	if err := WriteMarkdownTable(&w, want); err != nil {
-		t.Fatal(err)
-	}
-	md := w.String()
-	if !strings.Contains(md, `\|`) {
-		t.Fatalf("expected escaped pipe in md: %q", md)
-	}
-	got, err := ReadMarkdownTable(strings.NewReader(md))
-	if err != nil {
-		t.Fatal(err)
-	}
+	got := mustRoundTripMarkdown(t, want)
 	if !tablesEqual(got, want) {
-		t.Fatalf("got %#v", got)
+		t.Fatalf("write→read mismatch\ngot:  %#v\nwant: %#v", got, want)
 	}
 }
 
-func TestMarkdownBackslashInCell(t *testing.T) {
+func TestMarkdown_RoundTrip_BackslashInCell(t *testing.T) {
 	want := Table{
 		Columns: []string{"x"},
 		Rows:    [][]string{{`C:\temp`}},
 	}
+	got := mustRoundTripMarkdown(t, want)
+	if !tablesEqual(got, want) {
+		t.Fatalf("write→read mismatch\ngot:  %#v\nwant: %#v", got, want)
+	}
+}
+
+func TestMarkdown_RoundTrip_AfterProsePrefix(t *testing.T) {
+	want := Table{Columns: []string{"a", "b"}, Rows: [][]string{{"1", "2"}}}
 	var w bytes.Buffer
 	if err := WriteMarkdownTable(&w, want); err != nil {
-		t.Fatal(err)
+		t.Fatalf("WriteMarkdownTable: %v", err)
 	}
-	got, err := ReadMarkdownTable(bytes.NewReader(w.Bytes()))
+	doc := "Some intro\n\n" + w.String()
+	got, err := ReadMarkdownTable(strings.NewReader(doc))
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("ReadMarkdownTable: %v", err)
 	}
 	if !tablesEqual(got, want) {
-		t.Fatalf("got %#v md=%q", got, w.String())
+		t.Fatalf("write→read (with prose prefix) mismatch\ngot:  %#v\nwant: %#v", got, want)
 	}
 }
 
-func TestMarkdownProseBeforeTable(t *testing.T) {
-	s := "Some intro\n\n| a | b |\n| --- | --- |\n| 1 | 2 |\n"
-	got, err := ReadMarkdownTable(strings.NewReader(s))
-	if err != nil {
-		t.Fatal(err)
-	}
-	want := Table{Columns: []string{"a", "b"}, Rows: [][]string{{"1", "2"}}}
-	if !tablesEqual(got, want) {
-		t.Fatalf("got %#v", got)
-	}
-}
-
-func TestMarkdownAlignmentRoundTrip(t *testing.T) {
+func TestMarkdown_RoundTrip_Alignment(t *testing.T) {
 	tab := Table{
 		Columns: []string{"L", "C", "R"},
 		Rows:    [][]string{{"a", "b", "c"}},
@@ -87,47 +94,37 @@ func TestMarkdownAlignmentRoundTrip(t *testing.T) {
 	opts := MarkdownMarshalOpts{
 		Align: []MarkdownAlign{AlignLeft, AlignCenter, AlignRight},
 	}
-	var w1 bytes.Buffer
-	if err := WriteMarkdownTableWith(&w1, tab, opts); err != nil {
-		t.Fatal(err)
-	}
-	md := w1.String()
-	if !strings.Contains(md, ":---:") || !strings.Contains(md, "---:") {
-		t.Fatalf("md=%q", md)
-	}
-	gotTab, gotAlign, err := ReadMarkdownTableDetailed(strings.NewReader(md))
-	if err != nil {
-		t.Fatal(err)
-	}
+	gotTab, gotAlign := mustRoundTripMarkdownWith(t, tab, opts)
 	if !tablesEqual(gotTab, tab) {
-		t.Fatalf("table %#v", gotTab)
+		t.Fatalf("write→read table mismatch %#v", gotTab)
 	}
 	if len(gotAlign) != 3 || gotAlign[0] != AlignLeft || gotAlign[1] != AlignCenter || gotAlign[2] != AlignRight {
 		t.Fatalf("align %#v", gotAlign)
 	}
 	var w2 bytes.Buffer
 	if err := WriteMarkdownTableWith(&w2, gotTab, MarkdownMarshalOpts{Align: gotAlign}); err != nil {
+		t.Fatalf("remarshal: %v", err)
+	}
+	var w1 bytes.Buffer
+	if err := WriteMarkdownTableWith(&w1, tab, opts); err != nil {
 		t.Fatal(err)
 	}
-	if w2.String() != md {
-		t.Fatalf("remarshal differs:\n%s\nvs\n%s", md, w2.String())
+	if w2.String() != w1.String() {
+		t.Fatalf("second write→read loop bytes differ:\n%s\nvs\n%s", w1.String(), w2.String())
 	}
 }
 
-func TestReadMarkdownTable_NoTable(t *testing.T) {
+func TestMarkdown_RoundTrip_HeaderOnly(t *testing.T) {
+	want := Table{Columns: []string{"x"}, Rows: nil}
+	got := mustRoundTripMarkdown(t, want)
+	if !tablesEqual(got, want) {
+		t.Fatalf("write→read mismatch\ngot:  %#v\nwant: %#v", got, want)
+	}
+}
+
+func TestMarkdown_Read_NoTable(t *testing.T) {
 	_, err := ReadMarkdownTable(strings.NewReader("hello\nworld\n"))
 	if err == nil {
 		t.Fatal("expected error")
-	}
-}
-
-func TestReadMarkdownTable_HeaderOnly(t *testing.T) {
-	md := "| x |\n| --- |\n"
-	tab, err := ReadMarkdownTable(strings.NewReader(md))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(tab.Columns) != 1 || tab.Columns[0] != "x" || len(tab.Rows) != 0 {
-		t.Fatalf("%#v", tab)
 	}
 }

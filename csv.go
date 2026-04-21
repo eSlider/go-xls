@@ -1,6 +1,8 @@
 package xls
 
 import (
+	"encoding/binary"
+	"encoding/csv"
 	"fmt"
 	"io"
 	"strings"
@@ -54,6 +56,77 @@ func WriteCSV(w io.Writer, tab Table, delimiter, enclosure string, encodingFrom 
 	}
 	_, err = w.Write(utf16le)
 	return err
+}
+
+// ReadCSV parses CSV produced by [WriteCSV]: a UTF-16LE BOM, a leading sep= line, then RFC 4180–style records.
+// delimiter and enclosure must match the writer (only ASCII double quote `"` is supported for enclosure).
+// When firstRowAsHeader is true, the first record becomes [Table.Columns] and the rest [Table.Rows];
+// when false, every record is a row and column names are synthesized like [normalizeTable].
+func ReadCSV(r io.Reader, delimiter, enclosure string, firstRowAsHeader bool) (Table, error) {
+	if delimiter == "" {
+		delimiter = ","
+	}
+	if enclosure == "" {
+		enclosure = `"`
+	}
+	if enclosure != `"` {
+		return Table{}, fmt.Errorf("xls: ReadCSV only supports enclosure %q", `"`)
+	}
+	delimR, _, err := csvRunes(delimiter, enclosure)
+	if err != nil {
+		return Table{}, err
+	}
+
+	raw, err := io.ReadAll(r)
+	if err != nil {
+		return Table{}, err
+	}
+	if len(raw) < 2 || raw[0] != 0xff || raw[1] != 0xfe {
+		return Table{}, fmt.Errorf("xls: csv missing UTF-16LE BOM")
+	}
+	if (len(raw)-2)%2 != 0 {
+		return Table{}, fmt.Errorf("xls: csv UTF-16 payload has odd byte length")
+	}
+	n := (len(raw) - 2) / 2
+	u16 := make([]uint16, n)
+	for i := range u16 {
+		u16[i] = binary.LittleEndian.Uint16(raw[2+i*2 : 4+i*2])
+	}
+	s := string(utf16.Decode(u16))
+	s = strings.ReplaceAll(s, "\r\n", "\n")
+	idx := strings.IndexByte(s, '\n')
+	if idx < 0 {
+		return Table{}, fmt.Errorf("xls: csv missing newline after sep= line")
+	}
+	first := s[:idx]
+	const sepPrefix = "sep="
+	if !strings.HasPrefix(first, sepPrefix) {
+		return Table{}, fmt.Errorf("xls: csv missing sep= line")
+	}
+	sepVal := first[len(sepPrefix):]
+	sepRunes := []rune(sepVal)
+	if len(sepRunes) != 1 || sepRunes[0] != delimR {
+		return Table{}, fmt.Errorf("xls: sep= value %q does not match delimiter %q", sepVal, delimiter)
+	}
+	rest := s[idx+1:]
+	cr := csv.NewReader(strings.NewReader(rest))
+	cr.Comma = delimR
+	cr.LazyQuotes = true
+	records, err := cr.ReadAll()
+	if err != nil {
+		return Table{}, err
+	}
+	if len(records) == 0 {
+		return Table{}, nil
+	}
+	if firstRowAsHeader {
+		return Table{
+			Columns: append([]string(nil), records[0]...),
+			Rows:    append([][]string(nil), records[1:]...),
+		}, nil
+	}
+	tab := Table{Rows: append([][]string(nil), records...)}
+	return normalizeTable(tab), nil
 }
 
 func csvRunes(delimiter, enclosure string) (delim rune, enc rune, err error) {
