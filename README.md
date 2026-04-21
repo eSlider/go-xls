@@ -1,27 +1,29 @@
 # go-xls
 
 [![CI](https://github.com/eSlider/go-xls/actions/workflows/ci.yml/badge.svg)](https://github.com/eSlider/go-xls/actions/workflows/ci.yml)
-[![Go Reference](https://pkg.go.dev/badge/github.com/eSlider/go-xls/v2.svg)](https://pkg.go.dev/github.com/eSlider/go-xls/v2)
+[![Go Reference](https://pkg.go.dev/badge/github.com/eslider/go-xls/v2.svg)](https://pkg.go.dev/github.com/eslider/go-xls/v2)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Go](https://img.shields.io/badge/Go-1.22+-00ADD8.svg)](https://go.dev)
 [![Latest Release](https://img.shields.io/github/v/tag/eSlider/go-xls?sort=semver&label=release)](https://github.com/eSlider/go-xls/releases)
+
+**[pkg.go.dev/github.com/eslider/go-xls](https://pkg.go.dev/github.com/eslider/go-xls)** (module index) · **[pkg.go.dev/…/v2](https://pkg.go.dev/github.com/eslider/go-xls/v2)** (this major version’s `xls` package)
 
 Small, **`io.Writer` / `io.Reader`–first** helpers for tabular data: UTF‑16LE CSV (BOM + `sep=`), legacy binary **.xls** (linear BIFF), GitHub-style **markdown pipe tables**, and optional HTTP attachment headers.
 
 ## Install
 
 ```bash
-go get github.com/eSlider/go-xls/v2@v2.0.0
+go get github.com/eslider/go-xls/v2@v2.0.1
 ```
 
-The string **`xls.Version`** matches this release (`2.0.0`). Git tags use a `v` prefix (`v2.0.0`); keep the const and tag in sync when publishing.
+The string **`xls.Version`** matches this release (`2.0.1`). Git tags use a `v` prefix (`v2.0.1`); keep the const and tag in sync when publishing.
 
-**Module path:** `github.com/eSlider/go-xls/v2` (Go semantic import versioning for v2+).
+**Module path:** `github.com/eslider/go-xls/v2` (Go semantic import versioning for v2+).
 
 ## Write legacy `.xls`
 
 ```go
-import "github.com/eSlider/go-xls/v2"
+import "github.com/eslider/go-xls/v2"
 
 tab := xls.Table{
 	Columns: []string{"name", "qty"},
