@@ -4,13 +4,14 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"io"
 	"math"
 	"strconv"
 )
 
-// BIFF record types used by GenXLS / Mapbender linear stream.
+// BIFF record types for the linear stream read by [ReadXLS].
 const (
-	biffBOF = 0x809 // written as uint16 0x0809 on wire (LE bytes 09 08)
+	biffBOF = 0x809 // LE bytes 09 08
 	biffEOF = 0x0A
 )
 
@@ -20,10 +21,10 @@ const (
 )
 
 var (
-	// ErrOLEWorkbook indicates a compound-document .xls (OLE CFB). ParseXLS only supports the linear
-	// BIFF stream produced by GenXLS / Mapbender; use libxls-based tooling or convert to xlsx for those files.
-	ErrOLEWorkbook = errors.New("xls: OLE compound document not supported (linear Mapbender/GenXLS stream only)")
-	// ErrTruncatedXLS is returned when the byte stream ends in the middle of a record.
+	// ErrOLEWorkbook means the input is an OLE compound document (.xls as produced by Excel 97).
+	// [ReadXLS] only supports the linear BIFF stream from [WriteXLS]; use another tool or convert to .xlsx.
+	ErrOLEWorkbook = errors.New("xls: OLE compound workbook not supported (linear BIFF stream only)")
+	// ErrTruncatedXLS means the stream ended inside a BIFF record.
 	ErrTruncatedXLS = errors.New("xls: truncated record")
 )
 
@@ -33,12 +34,16 @@ type sparseCell struct {
 	text     string
 }
 
-// ParseXLS reads a legacy .xls byte stream in the Mapbender / GenXLS linear BIFF layout.
-// It is not a full Excel 97 OLE parser; files beginning with the OLE signature return [ErrOLEWorkbook].
+// ReadXLS reads a legacy .xls linear BIFF stream from r. It is not a full OLE workbook parser;
+// inputs starting with the OLE signature return [ErrOLEWorkbook].
 //
-// When firstRowAsHeader is true, row 0 supplies [Table.Columns] and following rows become [Table.Rows].
-// When false, columns are named "0","1",… (widest row) and every populated row is in Rows (dense grid).
-func ParseXLS(b []byte, firstRowAsHeader bool) (Table, error) {
+// When firstRowAsHeader is true, row 0 becomes [Table.Columns] and following rows [Table.Rows].
+// When false, columns are named "0","1",… (widest row) and every grid row is in [Table.Rows].
+func ReadXLS(r io.Reader, firstRowAsHeader bool) (Table, error) {
+	b, err := io.ReadAll(r)
+	if err != nil {
+		return Table{}, err
+	}
 	if len(b) >= 4 && b[0] == 0xD0 && b[1] == 0xCF && b[2] == 0x11 && b[3] == 0xE0 {
 		return Table{}, ErrOLEWorkbook
 	}
@@ -65,10 +70,10 @@ func ParseXLS(b []byte, firstRowAsHeader bool) (Table, error) {
 	return normalizeTable(tab), nil
 }
 
-// ParseXLSToMaps parses XLS with the first row as map keys (same as ParseXLS(b, true) then row→map).
+// ReadXLSToMaps reads r like [ReadXLS] with a header row and returns one map per data row.
 // Duplicate header names: later columns overwrite earlier keys in each map.
-func ParseXLSToMaps(b []byte) ([]map[string]string, error) {
-	t, err := ParseXLS(b, true)
+func ReadXLSToMaps(r io.Reader) ([]map[string]string, error) {
+	t, err := ReadXLS(r, true)
 	if err != nil {
 		return nil, err
 	}
@@ -108,7 +113,7 @@ func decodeXLSStream(b []byte) ([]sparseCell, error) {
 
 		switch typ {
 		case biffBOF:
-			// payload ignored (GenXLS writes 8-byte BOF body)
+			// ignore BOF payload
 		case biffEOF:
 			if reclen != 0 {
 				return nil, fmt.Errorf("xls: unexpected EOF payload length %d", reclen)
@@ -136,7 +141,7 @@ func decodeXLSStream(b []byte) ([]sparseCell, error) {
 				return nil, fmt.Errorf("xls: too many cells (> %d)", maxXLSCells)
 			}
 		default:
-			// skip unknown records (forward-compatible)
+			// skip unknown records
 		}
 	}
 	if off < len(b) {
@@ -154,7 +159,6 @@ func parseStringRecord(payload []byte) (sparseCell, error) {
 	}
 	row := binary.LittleEndian.Uint16(payload[0:2])
 	col := binary.LittleEndian.Uint16(payload[2:4])
-	// xf := binary.LittleEndian.Uint16(payload[4:6])
 	strLen := int(binary.LittleEndian.Uint16(payload[6:8]))
 	if 8+strLen != len(payload) {
 		return sparseCell{}, fmt.Errorf("xls: string record length mismatch (declared %d, payload %d)", strLen, len(payload))
@@ -170,7 +174,6 @@ func parseNumberRecord(payload []byte) (sparseCell, error) {
 	}
 	row := binary.LittleEndian.Uint16(payload[0:2])
 	col := binary.LittleEndian.Uint16(payload[2:4])
-	// xf := binary.LittleEndian.Uint16(payload[4:6])
 	v := math.Float64frombits(binary.LittleEndian.Uint64(payload[6:14]))
 	if math.IsNaN(v) || math.IsInf(v, 0) {
 		return sparseCell{}, fmt.Errorf("xls: invalid numeric cell")
@@ -224,7 +227,6 @@ func cellsToDenseGrid(cells []sparseCell) ([][]string, error) {
 		seen[r][co] = true
 		grid[r][co] = c.text
 	}
-	// Trim trailing all-empty rows (common for sparse exports).
 	for len(grid) > 0 {
 		last := grid[len(grid)-1]
 		empty := true

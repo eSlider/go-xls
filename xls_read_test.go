@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-func TestParseXLS_RoundTripWithHeader(t *testing.T) {
+func TestReadXLS_RoundTripWithHeader(t *testing.T) {
 	want := Table{
 		Columns: []string{"name", "qty"},
 		Rows: [][]string{
@@ -14,11 +14,11 @@ func TestParseXLS_RoundTripWithHeader(t *testing.T) {
 			{"banana", "x"},
 		},
 	}
-	b, err := GenXLS(want, true)
-	if err != nil {
+	var wbuf bytes.Buffer
+	if err := WriteXLS(&wbuf, want, true); err != nil {
 		t.Fatal(err)
 	}
-	got, err := ParseXLS(b, true)
+	got, err := ReadXLS(bytes.NewReader(wbuf.Bytes()), true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -27,18 +27,18 @@ func TestParseXLS_RoundTripWithHeader(t *testing.T) {
 	}
 }
 
-func TestParseXLS_RoundTripNumericKeysNoHeader(t *testing.T) {
+func TestReadXLS_RoundTripNumericKeysNoHeader(t *testing.T) {
 	want := Table{
 		Columns: []string{"0", "1"},
 		Rows: [][]string{
 			{"a", "2"},
 		},
 	}
-	b, err := GenXLS(want, true)
-	if err != nil {
+	var wbuf bytes.Buffer
+	if err := WriteXLS(&wbuf, want, true); err != nil {
 		t.Fatal(err)
 	}
-	got, err := ParseXLS(b, false)
+	got, err := ReadXLS(bytes.NewReader(wbuf.Bytes()), false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -47,16 +47,16 @@ func TestParseXLS_RoundTripNumericKeysNoHeader(t *testing.T) {
 	}
 }
 
-func TestParseXLSToMaps(t *testing.T) {
+func TestReadXLSToMaps(t *testing.T) {
 	tab := Table{
 		Columns: []string{"a", "b"},
 		Rows:    [][]string{{"1", "2"}},
 	}
-	b, err := GenXLS(tab, true)
-	if err != nil {
+	var wbuf bytes.Buffer
+	if err := WriteXLS(&wbuf, tab, true); err != nil {
 		t.Fatal(err)
 	}
-	maps, err := ParseXLSToMaps(b)
+	maps, err := ReadXLSToMaps(bytes.NewReader(wbuf.Bytes()))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -68,9 +68,9 @@ func TestParseXLSToMaps(t *testing.T) {
 	}
 }
 
-func TestParseXLS_OLERejected(t *testing.T) {
+func TestReadXLS_OLERejected(t *testing.T) {
 	b := []byte{0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1}
-	_, err := ParseXLS(b, true)
+	_, err := ReadXLS(bytes.NewReader(b), true)
 	if err == nil {
 		t.Fatal("expected error")
 	}
@@ -79,12 +79,12 @@ func TestParseXLS_OLERejected(t *testing.T) {
 	}
 }
 
-func TestParseXLS_Empty(t *testing.T) {
-	b, err := GenXLS(Table{}, true)
-	if err != nil {
+func TestReadXLS_Empty(t *testing.T) {
+	var wbuf bytes.Buffer
+	if err := WriteXLS(&wbuf, Table{}, true); err != nil {
 		t.Fatal(err)
 	}
-	got, err := ParseXLS(b, true)
+	got, err := ReadXLS(bytes.NewReader(wbuf.Bytes()), true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -118,10 +118,11 @@ func tablesEqual(a, b Table) bool {
 	return true
 }
 
-func TestParseXLS_TrailingGarbageErrors(t *testing.T) {
-	b, _ := GenXLS(Table{Columns: []string{"a"}, Rows: [][]string{{"b"}}}, true)
-	b = append(b, []byte{0xFF, 0xFF}...)
-	_, err := ParseXLS(b, true)
+func TestReadXLS_TrailingGarbageErrors(t *testing.T) {
+	var wbuf bytes.Buffer
+	_ = WriteXLS(&wbuf, Table{Columns: []string{"a"}, Rows: [][]string{{"b"}}}, true)
+	b := append(wbuf.Bytes(), []byte{0xFF, 0xFF}...)
+	_, err := ReadXLS(bytes.NewReader(b), true)
 	if err == nil {
 		t.Fatal("expected error")
 	}
@@ -148,8 +149,7 @@ func TestIso88591RoundTrip(t *testing.T) {
 	}
 }
 
-func TestParseXLS_StreamWithoutEOF(t *testing.T) {
-	// Minimal stream: BOF only (12 bytes) — no EOF, parser accepts if bytes exhausted after loop
+func TestReadXLS_StreamWithoutEOF(t *testing.T) {
 	var buf bytes.Buffer
 	writeU16LE(&buf, 0x809)
 	writeU16LE(&buf, 0x8)
@@ -157,7 +157,7 @@ func TestParseXLS_StreamWithoutEOF(t *testing.T) {
 	writeU16LE(&buf, 0x10)
 	writeU16LE(&buf, 0)
 	writeU16LE(&buf, 0)
-	_, err := ParseXLS(buf.Bytes(), true)
+	_, err := ReadXLS(bytes.NewReader(buf.Bytes()), true)
 	if err != nil {
 		t.Fatal(err)
 	}

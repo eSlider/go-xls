@@ -2,14 +2,15 @@ package xls
 
 import (
 	"fmt"
+	"io"
 	"strconv"
 	"strings"
 
 	"github.com/xuri/excelize/v2"
 )
 
-// GenXLSX builds an .xlsx workbook (OpenXML) from tabular data, analogous to Mapbender's SimpleXLSXGen::fromArray.
-func GenXLSX(tab Table, detectHead bool) ([]byte, error) {
+// WriteXLSX writes a single-sheet OpenXML .xlsx workbook to w.
+func WriteXLSX(w io.Writer, tab Table, detectHead bool) error {
 	tab = normalizeTable(tab)
 
 	f := excelize.NewFile()
@@ -17,18 +18,18 @@ func GenXLSX(tab Table, detectHead bool) ([]byte, error) {
 
 	sheet := f.GetSheetName(0)
 	if sheet == "" {
-		return nil, fmt.Errorf("xls: excelize default sheet missing")
+		return fmt.Errorf("xls: excelize default sheet missing")
 	}
 
 	r := 1
-	if detectHead && len(tab.Rows) > 0 && len(tab.Columns) > 0 && !allPHPNumericKeys(tab.Columns) {
+	if detectHead && len(tab.Rows) > 0 && len(tab.Columns) > 0 && !allKeysNumeric(tab.Columns) {
 		for c, name := range tab.Columns {
 			cell, err := excelize.CoordinatesToCellName(c+1, r)
 			if err != nil {
-				return nil, err
+				return err
 			}
 			if err := f.SetCellStr(sheet, cell, name); err != nil {
-				return nil, err
+				return err
 			}
 		}
 		r++
@@ -38,24 +39,20 @@ func GenXLSX(tab Table, detectHead bool) ([]byte, error) {
 		for c := range tab.Columns {
 			cell, err := excelize.CoordinatesToCellName(c+1, r)
 			if err != nil {
-				return nil, err
+				return err
 			}
 			val := ""
 			if c < len(row) {
 				val = row[c]
 			}
 			if err := setCellSmart(f, sheet, cell, val); err != nil {
-				return nil, err
+				return err
 			}
 		}
 		r++
 	}
 
-	buf, err := f.WriteToBuffer()
-	if err != nil {
-		return nil, err
-	}
-	return buf.Bytes(), nil
+	return f.Write(w)
 }
 
 func setCellSmart(f *excelize.File, sheet, cell, val string) error {
@@ -63,7 +60,7 @@ func setCellSmart(f *excelize.File, sheet, cell, val string) error {
 	if s == "" {
 		return f.SetCellValue(sheet, cell, "")
 	}
-	if phpIsNumeric(s) {
+	if isNumericString(s) {
 		fl, err := strconv.ParseFloat(s, 64)
 		if err == nil {
 			return f.SetCellFloat(sheet, cell, fl, -1, 64)

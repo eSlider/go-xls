@@ -1,6 +1,7 @@
 package xls
 
 import (
+	"bytes"
 	"strings"
 	"testing"
 )
@@ -13,16 +14,16 @@ func TestMarkdownRoundTrip(t *testing.T) {
 			{"banana", "x"},
 		},
 	}
-	md, err := MarshalMarkdownTable(want)
-	if err != nil {
+	var w bytes.Buffer
+	if err := WriteMarkdownTable(&w, want); err != nil {
 		t.Fatal(err)
 	}
-	got, err := UnmarshalMarkdownTable(md)
+	got, err := ReadMarkdownTable(bytes.NewReader(w.Bytes()))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !tablesEqual(got, want) {
-		t.Fatalf("got %#v want %#v\n--- md ---\n%s", got, want, md)
+		t.Fatalf("got %#v want %#v\n--- md ---\n%s", got, want, w.String())
 	}
 }
 
@@ -31,14 +32,15 @@ func TestMarkdownPipeInCell(t *testing.T) {
 		Columns: []string{"a"},
 		Rows:    [][]string{{"p|q"}},
 	}
-	md, err := MarshalMarkdownTable(want)
-	if err != nil {
+	var w bytes.Buffer
+	if err := WriteMarkdownTable(&w, want); err != nil {
 		t.Fatal(err)
 	}
+	md := w.String()
 	if !strings.Contains(md, `\|`) {
 		t.Fatalf("expected escaped pipe in md: %q", md)
 	}
-	got, err := UnmarshalMarkdownTable(md)
+	got, err := ReadMarkdownTable(strings.NewReader(md))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -52,22 +54,22 @@ func TestMarkdownBackslashInCell(t *testing.T) {
 		Columns: []string{"x"},
 		Rows:    [][]string{{`C:\temp`}},
 	}
-	md, err := MarshalMarkdownTable(want)
-	if err != nil {
+	var w bytes.Buffer
+	if err := WriteMarkdownTable(&w, want); err != nil {
 		t.Fatal(err)
 	}
-	got, err := UnmarshalMarkdownTable(md)
+	got, err := ReadMarkdownTable(bytes.NewReader(w.Bytes()))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !tablesEqual(got, want) {
-		t.Fatalf("got %#v md=%q", got, md)
+		t.Fatalf("got %#v md=%q", got, w.String())
 	}
 }
 
 func TestMarkdownProseBeforeTable(t *testing.T) {
 	s := "Some intro\n\n| a | b |\n| --- | --- |\n| 1 | 2 |\n"
-	got, err := UnmarshalMarkdownTable(s)
+	got, err := ReadMarkdownTable(strings.NewReader(s))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -82,17 +84,18 @@ func TestMarkdownAlignmentRoundTrip(t *testing.T) {
 		Columns: []string{"L", "C", "R"},
 		Rows:    [][]string{{"a", "b", "c"}},
 	}
-	want := MarkdownMarshalOpts{
+	opts := MarkdownMarshalOpts{
 		Align: []MarkdownAlign{AlignLeft, AlignCenter, AlignRight},
 	}
-	md, err := MarshalMarkdownTableWith(tab, want)
-	if err != nil {
+	var w1 bytes.Buffer
+	if err := WriteMarkdownTableWith(&w1, tab, opts); err != nil {
 		t.Fatal(err)
 	}
+	md := w1.String()
 	if !strings.Contains(md, ":---:") || !strings.Contains(md, "---:") {
 		t.Fatalf("md=%q", md)
 	}
-	gotTab, gotAlign, err := UnmarshalMarkdownTableDetailed(md)
+	gotTab, gotAlign, err := ReadMarkdownTableDetailed(strings.NewReader(md))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -102,25 +105,25 @@ func TestMarkdownAlignmentRoundTrip(t *testing.T) {
 	if len(gotAlign) != 3 || gotAlign[0] != AlignLeft || gotAlign[1] != AlignCenter || gotAlign[2] != AlignRight {
 		t.Fatalf("align %#v", gotAlign)
 	}
-	md2, err := MarshalMarkdownTableWith(gotTab, MarkdownMarshalOpts{Align: gotAlign})
-	if err != nil {
+	var w2 bytes.Buffer
+	if err := WriteMarkdownTableWith(&w2, gotTab, MarkdownMarshalOpts{Align: gotAlign}); err != nil {
 		t.Fatal(err)
 	}
-	if md2 != md {
-		t.Fatalf("remarshal differs:\n%s\nvs\n%s", md, md2)
+	if w2.String() != md {
+		t.Fatalf("remarshal differs:\n%s\nvs\n%s", md, w2.String())
 	}
 }
 
-func TestUnmarshalMarkdownTable_NoTable(t *testing.T) {
-	_, err := UnmarshalMarkdownTable("hello\nworld\n")
+func TestReadMarkdownTable_NoTable(t *testing.T) {
+	_, err := ReadMarkdownTable(strings.NewReader("hello\nworld\n"))
 	if err == nil {
 		t.Fatal("expected error")
 	}
 }
 
-func TestUnmarshalMarkdownTable_HeaderOnly(t *testing.T) {
+func TestReadMarkdownTable_HeaderOnly(t *testing.T) {
 	md := "| x |\n| --- |\n"
-	tab, err := UnmarshalMarkdownTable(md)
+	tab, err := ReadMarkdownTable(strings.NewReader(md))
 	if err != nil {
 		t.Fatal(err)
 	}

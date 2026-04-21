@@ -2,6 +2,7 @@ package xls
 
 import (
 	"fmt"
+	"io"
 	"strings"
 )
 
@@ -14,63 +15,77 @@ const (
 	AlignRight
 )
 
-// MarkdownMarshalOpts controls markdown table output from [MarshalMarkdownTableWith].
+// MarkdownMarshalOpts controls markdown table output from [WriteMarkdownTableWith].
 type MarkdownMarshalOpts struct {
 	// Align is per-column alignment (shorter slice defaults remaining columns to left).
 	Align []MarkdownAlign
 }
 
-// MarshalMarkdownTable renders tab as a GitHub-flavored markdown pipe table.
-// Header row uses [Table.Columns] (after [normalizeTable] if columns were empty).
-func MarshalMarkdownTable(tab Table) (string, error) {
-	return MarshalMarkdownTableWith(tab, MarkdownMarshalOpts{})
+// WriteMarkdownTable writes a GitHub-flavored markdown pipe table to w.
+// The header row uses [Table.Columns] (after [normalizeTable] if columns were empty).
+func WriteMarkdownTable(w io.Writer, tab Table) error {
+	return WriteMarkdownTableWith(w, tab, MarkdownMarshalOpts{})
 }
 
-// MarshalMarkdownTableWith renders tab as a markdown pipe table with optional column alignment.
-func MarshalMarkdownTableWith(tab Table, opts MarkdownMarshalOpts) (string, error) {
+// WriteMarkdownTableWith writes a markdown pipe table to w with optional column alignment.
+func WriteMarkdownTableWith(w io.Writer, tab Table, opts MarkdownMarshalOpts) error {
 	tab = normalizeTable(tab)
 	if len(tab.Columns) == 0 {
-		return "", fmt.Errorf("xls: markdown table needs at least one column")
+		return fmt.Errorf("xls: markdown table needs at least one column")
 	}
 
-	var b strings.Builder
-	writeMarkdownPipeRow(&b, tab.Columns)
-	b.WriteByte('\n')
-	writeMarkdownDivider(&b, len(tab.Columns), opts.Align)
-	b.WriteByte('\n')
+	if err := writeMarkdownPipeRow(w, tab.Columns); err != nil {
+		return err
+	}
+	if _, err := w.Write([]byte("\n")); err != nil {
+		return err
+	}
+	if err := writeMarkdownDivider(w, len(tab.Columns), opts.Align); err != nil {
+		return err
+	}
 	for _, row := range tab.Rows {
+		if _, err := w.Write([]byte("\n")); err != nil {
+			return err
+		}
 		cells := make([]string, len(tab.Columns))
-		for i := range tab.Columns {
-			if i < len(row) {
-				cells[i] = row[i]
+		for j := range tab.Columns {
+			if j < len(row) {
+				cells[j] = row[j]
 			}
 		}
-		writeMarkdownPipeRow(&b, cells)
-		b.WriteByte('\n')
+		if err := writeMarkdownPipeRow(w, cells); err != nil {
+			return err
+		}
 	}
-	return strings.TrimSuffix(b.String(), "\n"), nil
+	return nil
 }
 
-func writeMarkdownPipeRow(w *strings.Builder, cells []string) {
-	w.WriteByte('|')
+func writeMarkdownPipeRow(w io.Writer, cells []string) error {
+	if _, err := w.Write([]byte{'|'}); err != nil {
+		return err
+	}
 	for _, c := range cells {
-		w.WriteByte(' ')
-		w.WriteString(escapeMarkdownCell(c))
-		w.WriteString(" |")
+		if _, err := fmt.Fprintf(w, " %s |", escapeMarkdownCell(c)); err != nil {
+			return err
+		}
 	}
+	return nil
 }
 
-func writeMarkdownDivider(w *strings.Builder, ncols int, align []MarkdownAlign) {
-	w.WriteByte('|')
+func writeMarkdownDivider(w io.Writer, ncols int, align []MarkdownAlign) error {
+	if _, err := w.Write([]byte{'|'}); err != nil {
+		return err
+	}
 	for i := 0; i < ncols; i++ {
 		a := AlignLeft
 		if i < len(align) {
 			a = align[i]
 		}
-		w.WriteByte(' ')
-		w.WriteString(markdownDividerField(a))
-		w.WriteString(" |")
+		if _, err := fmt.Fprintf(w, " %s |", markdownDividerField(a)); err != nil {
+			return err
+		}
 	}
+	return nil
 }
 
 func markdownDividerField(a MarkdownAlign) string {
@@ -112,16 +127,24 @@ func unescapeMarkdownCell(s string) string {
 	return b.String()
 }
 
-// UnmarshalMarkdownTable parses the first GitHub-style pipe table in s (header + divider + body rows).
-// Leading / trailing blank lines are ignored. Prose lines before the first header+divider pair are skipped.
-func UnmarshalMarkdownTable(s string) (Table, error) {
-	tab, _, err := UnmarshalMarkdownTableDetailed(s)
+// ReadMarkdownTable parses the first GitHub-style pipe table from r (header + divider + body rows).
+// Prose before the first header+divider pair is skipped.
+func ReadMarkdownTable(r io.Reader) (Table, error) {
+	tab, _, err := ReadMarkdownTableDetailed(r)
 	return tab, err
 }
 
-// UnmarshalMarkdownTableDetailed is like [UnmarshalMarkdownTable] but also returns column alignment
-// decoded from the divider row (for round-tripping with [MarshalMarkdownTableWith]).
-func UnmarshalMarkdownTableDetailed(s string) (Table, []MarkdownAlign, error) {
+// ReadMarkdownTableDetailed is like [ReadMarkdownTable] but also returns column alignment
+// from the divider row (for round-tripping with [WriteMarkdownTableWith]).
+func ReadMarkdownTableDetailed(r io.Reader) (Table, []MarkdownAlign, error) {
+	data, err := io.ReadAll(r)
+	if err != nil {
+		return Table{}, nil, err
+	}
+	return parseMarkdownTableFromString(string(data))
+}
+
+func parseMarkdownTableFromString(s string) (Table, []MarkdownAlign, error) {
 	lines := splitMarkdownLines(s)
 	start := -1
 	for i, ln := range lines {

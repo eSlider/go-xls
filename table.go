@@ -2,9 +2,9 @@ package xls
 
 import "strconv"
 
-// Table is column-ordered tabular data for export.
+// Table is column-ordered tabular data.
 // Columns defines order and names; each Rows[i] may be shorter than len(Columns) (missing cells are empty).
-// If Columns is nil or empty, synthetic names "0","1",… are derived from the widest row (Mapbender-style numeric keys).
+// If Columns is nil or empty, synthetic names "0","1",… are derived from the widest row.
 type Table struct {
 	Columns []string
 	Rows    [][]string

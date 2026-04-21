@@ -5,7 +5,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Go](https://img.shields.io/badge/Go-1.22+-00ADD8.svg)](https://go.dev)
 
-Small Go library for **CSV**, legacy **.xls** (BIFF), and **.xlsx** export (and **reading** those linear `.xls` streams), ported from Mapbender’s [`ExportResponse.php`](https://github.com/mapbender/mapbender/blob/master/src/FOM/CoreBundle/Component/ExportResponse.php) (`FOM\CoreBundle\Component\ExportResponse`). It focuses on the same wire formats and HTTP headers used there: UTF‑16LE CSV with BOM and `sep=`, hand-written BIFF cells for `.xls`, and OpenXML `.xlsx` via [excelize](https://github.com/xuri/excelize).
+Small, **`io.Writer` / `io.Reader`–first** helpers for tabular data: UTF‑16LE CSV (BOM + `sep=`), legacy binary **.xls** (linear BIFF), **.xlsx** via [excelize](https://github.com/xuri/excelize), GitHub-style **markdown pipe tables**, and optional HTTP attachment headers.
 
 ## Install
 
@@ -13,84 +13,79 @@ Small Go library for **CSV**, legacy **.xls** (BIFF), and **.xlsx** export (and 
 go get github.com/eSlider/go-xls
 ```
 
-## Usage
+## Write legacy `.xls`
 
 ```go
-package main
-
-import (
-	"net/http"
-	"os"
-
-	"github.com/eSlider/go-xls"
-)
-
-func main() {
-	tab := xls.Table{
-		Columns: []string{"name", "qty"},
-		Rows: [][]string{
-			{"apple", "3"},
-			{"banana", "2"},
-		},
-	}
-
-	// Legacy .xls (Mapbender genXLS-compatible layout on LE).
-	bin, err := xls.GenXLS(tab, true)
-	if err != nil {
-		panic(err)
-	}
-	_ = os.WriteFile("export.xls", bin, 0o644)
-
-	// UTF-16LE CSV with BOM + sep= line.
-	csv, err := xls.GenCSV(tab, ",", `"`, "UTF-8", true)
-	if err != nil {
-		panic(err)
-	}
-	_ = os.WriteFile("export.csv", csv, 0o644)
-
-	// .xlsx
-	xlsx, err := xls.GenXLSX(tab, true)
-	if err != nil {
-		panic(err)
-	}
-	_ = os.WriteFile("export.xlsx", xlsx, 0o644)
-
-	// Read back the same Mapbender-style .xls (first row → column names).
-	if _, err := xls.ParseXLS(bin, true); err != nil {
-		panic(err)
-	}
-	if _, err := xls.ParseXLSToMaps(bin); err != nil {
-		panic(err)
-	}
-
-	// HTTP attachment (Symfony-style headers from Mapbender).
-	_ = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		body, _ := xls.GenXLS(tab, true)
-		xls.WriteAttachment(w, "export.xls", xls.ContentTypeXLS, body, true)
-	})
+tab := xls.Table{
+	Columns: []string{"name", "qty"},
+	Rows:    [][]string{{"apple", "3"}},
+}
+var buf bytes.Buffer
+if err := xls.WriteXLS(&buf, tab, true); err != nil {
+	log.Fatal(err)
 }
 ```
 
-## Reading `.xls`
+## Read legacy `.xls`
 
-- **`ParseXLS(b, firstRowAsHeader)`** walks the **linear BIFF record stream** produced by `GenXLS` (BOF `0x809`, `0x204` string cells, `0x203` IEEE doubles, EOF `0x0A`).
-- **`ParseXLSToMaps(b)`** is shorthand for `ParseXLS(b, true)` then each data row as `map[string]string` (duplicate header names: last column wins).
-- **OLE workbooks** (typical Excel 97 `.xls` with magic `D0 CF 11 E0`) return `ErrOLEWorkbook`. Tools such as [northbright/xls2csv-go](https://github.com/northbright/xls2csv-go) use **libxls** for that container; this package intentionally matches only the Mapbender/minimal writer stream.
+Linear BIFF only (BOF `0x809`, string `0x204`, number `0x203`, EOF `0x0A`). OLE compound workbooks (`D0 CF 11 E0 …`) return `xls.ErrOLEWorkbook` — use another reader or convert to `.xlsx`.
+
+```go
+tab, err := xls.ReadXLS(bytes.NewReader(buf.Bytes()), true)
+if err != nil {
+	log.Fatal(err)
+}
+maps, err := xls.ReadXLSToMaps(bytes.NewReader(buf.Bytes()))
+_ = maps
+```
+
+## Write UTF‑16LE CSV
+
+```go
+var out bytes.Buffer
+err := xls.WriteCSV(&out, tab, ",", `"`, "UTF-8", true)
+```
+
+## Write `.xlsx`
+
+```go
+var out bytes.Buffer
+if err := xls.WriteXLSX(&out, tab, true); err != nil {
+	log.Fatal(err)
+}
+```
 
 ## Markdown pipe tables
 
-GitHub-style **pipe tables** (header + `|---|` divider + body) can be converted without templates (unlike [moul/mdtable](https://github.com/moul/mdtable), which uses `text/tabwriter` + `text/template` for arbitrary layouts):
+```go
+var md bytes.Buffer
+if err := xls.WriteMarkdownTable(&md, tab); err != nil {
+	log.Fatal(err)
+}
+parsed, err := xls.ReadMarkdownTable(bytes.NewReader(md.Bytes()))
+_, _, err = xls.ReadMarkdownTableDetailed(bytes.NewReader(md.Bytes()))
+_ = parsed
+```
 
-- **`MarshalMarkdownTable` / `MarshalMarkdownTableWith`** — from `Table`; escapes `\`, `|`, and newlines in cells.
-- **`UnmarshalMarkdownTable`** — finds the first valid table in a string (prose before it is ignored).
-- **`UnmarshalMarkdownTableDetailed`** — same as above plus per-column `MarkdownAlign` from the divider row for lossless alignment round-trips with `MarshalMarkdownTableWith`.
+Alignment round-trip: `WriteMarkdownTableWith` + `ReadMarkdownTableDetailed` + `MarkdownMarshalOpts{Align: …}`.
+
+## HTTP attachment
+
+```go
+body := bytes.NewReader(buf.Bytes())
+if err := xls.WriteAttachment(w, "export.xls", xls.ContentTypeXLS, body, int64(buf.Len()), true); err != nil {
+	log.Fatal(err)
+}
+```
+
+Use `size < 0` to omit `Content-Length` (chunked transfer).
 
 ## Behaviour notes
 
-- **Table**: columns are explicit and stable (Go has no PHP ordered-map iteration). If `Columns` is empty, synthetic names `0`, `1`, … are derived from the widest row, matching numeric-key tables in Mapbender.
-- **XLS**: string cells are encoded to **ISO‑8859‑1** (unmappable runes become `?`). Numbers use `strconv.ParseFloat` after `strings.TrimSpace`, similar to PHP `is_numeric` / `trim` usage.
-- **CSV**: only **`UTF-8` → UTF‑16LE** is implemented for `encodingFrom`; other labels return an error until transcoding is extended.
-- **XLSX**: uses **excelize**; numeric-looking cells are written as floats.
+- **`Table`**: if `Columns` is empty, names `"0"`, `"1"`, … are derived from the widest row.
+- **`.xls` strings**: ISO‑8859‑1 bytes; unmappable runes become `?`. Numeric-looking cells use `strconv.ParseFloat` on trimmed text.
+- **CSV**: only UTF‑8 source → UTF‑16LE is implemented for `encodingFrom` today.
+- **Markdown**: `|` and `\` in cells are escaped; pipe tables follow common GitHub-style divider rules.
 
 ## Testing
 

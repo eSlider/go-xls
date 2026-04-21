@@ -12,26 +12,25 @@ import (
 	"github.com/xuri/excelize/v2"
 )
 
-func TestGenXLS_Empty(t *testing.T) {
-	b, err := GenXLS(Table{}, true)
-	if err != nil {
+func TestWriteXLS_Empty(t *testing.T) {
+	var buf bytes.Buffer
+	if err := WriteXLS(&buf, Table{}, true); err != nil {
 		t.Fatal(err)
 	}
+	b := buf.Bytes()
 	if len(b) < 14 {
 		t.Fatalf("short output: %d bytes", len(b))
 	}
-	// BOF + EOF
 	wantBOFPrefix := []byte{0x09, 0x08, 0x08, 0x00, 0x00, 0x00, 0x10, 0x00, 0x00, 0x00, 0x00, 0x00}
 	if !bytes.HasPrefix(b, wantBOFPrefix) {
 		t.Fatalf("unexpected BOF prefix: %#v", b[:12])
 	}
-	// EOF record: opcode 0x000A, length 0 (four bytes LE).
 	if !bytes.HasSuffix(b, []byte{0x0a, 0x00, 0x00, 0x00}) {
 		t.Fatalf("unexpected EOF suffix: %#v", b[len(b)-4:])
 	}
 }
 
-func TestGenXLS_HeaderAndRows(t *testing.T) {
+func TestWriteXLS_HeaderAndRows(t *testing.T) {
 	tab := Table{
 		Columns: []string{"name", "qty"},
 		Rows: [][]string{
@@ -39,31 +38,31 @@ func TestGenXLS_HeaderAndRows(t *testing.T) {
 			{"banana", "x"},
 		},
 	}
-	b, err := GenXLS(tab, true)
-	if err != nil {
+	var buf bytes.Buffer
+	if err := WriteXLS(&buf, tab, true); err != nil {
 		t.Fatal(err)
 	}
+	b := buf.Bytes()
 	if !bytes.HasPrefix(b, []byte{0x09, 0x08, 0x08, 0x00, 0x00, 0x00, 0x10, 0x00, 0x00, 0x00, 0x00, 0x00}) {
 		t.Fatalf("bad BOF")
 	}
-	// Row 0 header: two LABEL records; row 1: NUMBER then LABEL; row 2: LABEL then LABEL
 	if !containsSubseq(b, buildNumberRecord(1, 1, 3)) {
 		t.Fatalf("missing numeric cell for qty=3: sample %#v", b[:min(80, len(b))])
 	}
 }
 
-func TestGenXLS_NumericKeysNoHeader(t *testing.T) {
+func TestWriteXLS_NumericKeysNoHeader(t *testing.T) {
 	tab := Table{
 		Columns: []string{"0", "1"},
 		Rows: [][]string{
 			{"a", "2"},
 		},
 	}
-	b, err := GenXLS(tab, true)
-	if err != nil {
+	var buf bytes.Buffer
+	if err := WriteXLS(&buf, tab, true); err != nil {
 		t.Fatal(err)
 	}
-	// First data row should be row 0 (no header): col0 string 'a', col1 number 2
+	b := buf.Bytes()
 	if !containsSubseq(b, buildNumberRecord(0, 1, 2)) {
 		t.Fatalf("expected numeric cell at row0 col1")
 	}
@@ -99,17 +98,18 @@ func min(a, b int) int {
 	return b
 }
 
-func TestGenCSV_BOMSepAndRoundTrip(t *testing.T) {
+func TestWriteCSV_BOMSepAndRoundTrip(t *testing.T) {
 	tab := Table{
 		Columns: []string{"a", "b"},
 		Rows: [][]string{
 			{"1", "two,three"},
 		},
 	}
-	b, err := GenCSV(tab, ",", `"`, "UTF-8", true)
-	if err != nil {
+	var buf bytes.Buffer
+	if err := WriteCSV(&buf, tab, ",", `"`, "UTF-8", true); err != nil {
 		t.Fatal(err)
 	}
+	b := buf.Bytes()
 	if len(b) < 2 || b[0] != 0xff || b[1] != 0xfe {
 		t.Fatalf("missing utf-16le bom: %#v", b[:4])
 	}
@@ -126,8 +126,8 @@ func TestGenCSV_BOMSepAndRoundTrip(t *testing.T) {
 	}
 }
 
-func TestGenCSV_UnsupportedEncoding(t *testing.T) {
-	_, err := GenCSV(Table{}, ",", `"`, "windows-1252", false)
+func TestWriteCSV_UnsupportedEncoding(t *testing.T) {
+	err := WriteCSV(io.Discard, Table{}, ",", `"`, "windows-1252", false)
 	if err == nil {
 		t.Fatal("expected error")
 	}
@@ -142,7 +142,10 @@ func TestNormalizeTable(t *testing.T) {
 
 func TestWriteAttachment(t *testing.T) {
 	rec := httptest.NewRecorder()
-	WriteAttachment(rec, "export.xls", ContentTypeXLS, []byte("abc"), true)
+	body := strings.NewReader("abc")
+	if err := WriteAttachment(rec, "export.xls", ContentTypeXLS, body, 3, true); err != nil {
+		t.Fatal(err)
+	}
 	res := rec.Result()
 	defer res.Body.Close()
 	if res.Header.Get("Content-Type") != ContentTypeXLS {
@@ -154,24 +157,25 @@ func TestWriteAttachment(t *testing.T) {
 	if res.Header.Get("Cache-Control") != "private" {
 		t.Fatalf("cache-control=%q", res.Header.Get("Cache-Control"))
 	}
-	body, err := io.ReadAll(res.Body)
+	out, err := io.ReadAll(res.Body)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if string(body) != "abc" {
-		t.Fatalf("body=%q", body)
+	if string(out) != "abc" {
+		t.Fatalf("body=%q", out)
 	}
 }
 
-func TestGenXLSX_Smoke(t *testing.T) {
+func TestWriteXLSX_Smoke(t *testing.T) {
 	tab := Table{
 		Columns: []string{"name"},
 		Rows:    [][]string{{"value"}},
 	}
-	b, err := GenXLSX(tab, true)
-	if err != nil {
+	var buf bytes.Buffer
+	if err := WriteXLSX(&buf, tab, true); err != nil {
 		t.Fatal(err)
 	}
+	b := buf.Bytes()
 	if !bytes.HasPrefix(b, []byte("PK")) {
 		t.Fatalf("expected zip/xlsx signature")
 	}

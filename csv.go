@@ -2,16 +2,17 @@ package xls
 
 import (
 	"fmt"
+	"io"
 	"strings"
 	"unicode/utf16"
 	"unicode/utf8"
 )
 
-// GenCSV builds UTF-16LE CSV bytes with BOM and a leading sep= line, matching Mapbender ExportResponse::setCsv.
-// Row cells must be UTF-8; encodingFrom is reserved for future transcoding (only UTF-8 is supported today).
-func GenCSV(tab Table, delimiter, enclosure string, encodingFrom string, detectHead bool) ([]byte, error) {
+// WriteCSV writes UTF-16LE CSV with a BOM and a leading sep= line.
+// Cell text must be UTF-8; encodingFrom is reserved (only UTF-8 is supported today).
+func WriteCSV(w io.Writer, tab Table, delimiter, enclosure string, encodingFrom string, detectHead bool) error {
 	if encodingFrom != "" && !strings.EqualFold(encodingFrom, "UTF-8") {
-		return nil, fmt.Errorf("xls: unsupported encodingFrom %q (only UTF-8)", encodingFrom)
+		return fmt.Errorf("xls: unsupported encodingFrom %q (only UTF-8)", encodingFrom)
 	}
 	if delimiter == "" {
 		delimiter = ","
@@ -21,7 +22,7 @@ func GenCSV(tab Table, delimiter, enclosure string, encodingFrom string, detectH
 	}
 	delimR, encR, err := csvRunes(delimiter, enclosure)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	tab = normalizeTable(tab)
@@ -46,14 +47,13 @@ func GenCSV(tab Table, delimiter, enclosure string, encodingFrom string, detectH
 
 	utf16le, err := utf8ToUTF16LE([]byte(body.String()))
 	if err != nil {
-		return nil, err
+		return err
 	}
-
-	out := make([]byte, 2+len(utf16le))
-	out[0] = 0xff
-	out[1] = 0xfe
-	copy(out[2:], utf16le)
-	return out, nil
+	if _, err := w.Write([]byte{0xff, 0xfe}); err != nil {
+		return err
+	}
+	_, err = w.Write(utf16le)
+	return err
 }
 
 func csvRunes(delimiter, enclosure string) (delim rune, enc rune, err error) {
@@ -111,13 +111,11 @@ func utf8ToUTF16LE(b []byte) ([]byte, error) {
 	return out, nil
 }
 
-// TrimTrailingFinalNewline removes a single trailing newline from UTF-16LE CSV bytes (after BOM) if present.
-// Mapbender stream ends without extra newline after last row in some paths; callers rarely need this.
+// TrimTrailingFinalNewline removes one trailing UTF-16LE newline (after BOM) from b if present.
 func TrimTrailingFinalNewline(b []byte) []byte {
 	if len(b) < 2 || b[0] != 0xff || b[1] != 0xfe {
 		return b
 	}
-	// UTF-16LE newline is 0x0A 0x00
 	if len(b) >= 4 && b[len(b)-2] == 0x0A && b[len(b)-1] == 0x00 {
 		return b[:len(b)-2]
 	}

@@ -3,36 +3,43 @@ package xls
 import (
 	"bytes"
 	"encoding/binary"
+	"io"
 	"math"
 	"strconv"
 	"strings"
 )
 
-// GenXLS generates a legacy .xls (BIFF) workbook matching Mapbender ExportResponse::genXLS
-// layout on little-endian hosts (PHP pack "s" / "d").
-func GenXLS(tab Table, detectHead bool) ([]byte, error) {
+// WriteXLS writes a legacy binary .xls workbook as a linear little-endian BIFF record stream
+// (BOF 0x809, LABEL-style strings 0x204, IEEE doubles 0x203, EOF 0x0A). It is not an OLE compound file.
+func WriteXLS(w io.Writer, tab Table, detectHead bool) error {
 	tab = normalizeTable(tab)
 
-	var buf bytes.Buffer
+	writeU16 := func(v uint16) error {
+		var b [2]byte
+		binary.LittleEndian.PutUint16(b[:], v)
+		_, err := w.Write(b[:])
+		return err
+	}
 
-	// Excel BOF (BIFF2/BIFF5-style minimal writer used by Mapbender).
-	writeU16LE(&buf, 0x809)
-	writeU16LE(&buf, 0x8)
-	writeU16LE(&buf, 0)
-	writeU16LE(&buf, 0x10)
-	writeU16LE(&buf, 0)
-	writeU16LE(&buf, 0)
+	// BOF
+	for _, v := range []uint16{0x809, 0x8, 0, 0x10, 0, 0} {
+		if err := writeU16(v); err != nil {
+			return err
+		}
+	}
 
 	rowNum := uint16(0)
 
-	if detectHead && len(tab.Rows) > 0 && len(tab.Columns) > 0 && !allPHPNumericKeys(tab.Columns) {
+	if detectHead && len(tab.Rows) > 0 && len(tab.Columns) > 0 && !allKeysNumeric(tab.Columns) {
 		colNum := uint16(0)
 		for _, key := range tab.Columns {
 			cell, err := encodeXLSStringCell(rowNum, colNum, key)
 			if err != nil {
-				return nil, err
+				return err
 			}
-			buf.Write(cell)
+			if _, err := w.Write(cell); err != nil {
+				return err
+			}
 			colNum++
 		}
 		rowNum++
@@ -47,24 +54,25 @@ func GenXLS(tab Table, detectHead bool) ([]byte, error) {
 			}
 			cell, err := encodeXLSCell(rowNum, colNum, val)
 			if err != nil {
-				return nil, err
+				return err
 			}
-			buf.Write(cell)
+			if _, err := w.Write(cell); err != nil {
+				return err
+			}
 			colNum++
 		}
 		rowNum++
 	}
 
-	// Excel EOF
-	writeU16LE(&buf, 0x0A)
-	writeU16LE(&buf, 0)
-
-	return buf.Bytes(), nil
+	if err := writeU16(0x0A); err != nil {
+		return err
+	}
+	return writeU16(0)
 }
 
 func encodeXLSCell(row, col uint16, raw string) ([]byte, error) {
 	s := strings.TrimSpace(raw)
-	if phpIsNumeric(s) {
+	if isNumericString(s) {
 		f, err := strconv.ParseFloat(s, 64)
 		if err != nil {
 			return encodeXLSStringCell(row, col, raw)
@@ -111,22 +119,22 @@ func writeU16LE(w *bytes.Buffer, v uint16) {
 	_, _ = w.Write(b[:])
 }
 
-func allPHPNumericKeys(keys []string) bool {
+// allKeysNumeric reports whether every column name parses as a decimal number (no header row in that case).
+func allKeysNumeric(keys []string) bool {
 	for _, k := range keys {
-		if !phpIsNumeric(k) {
+		if !isNumericString(k) {
 			return false
 		}
 	}
 	return true
 }
 
-// phpIsNumeric approximates PHP is_numeric for array keys used by Mapbender.
-func phpIsNumeric(s string) bool {
+// isNumericString reports whether s looks like a decimal number (after trim).
+func isNumericString(s string) bool {
 	s = strings.TrimSpace(s)
 	if s == "" {
 		return false
 	}
-	// PHP treats leading +/- and floats, hex in older PHP - stick to ParseFloat parity for decimals.
 	_, err := strconv.ParseFloat(s, 64)
 	return err == nil
 }
