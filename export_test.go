@@ -68,11 +68,11 @@ func TestWriteXLS_NumericKeysNoHeader(t *testing.T) {
 
 func buildNumberRecord(row, col uint16, v float64) []byte {
 	var buf bytes.Buffer
-	_ = binary.Write(&buf, binary.LittleEndian, uint16(XLSIntType))
-	_ = binary.Write(&buf, binary.LittleEndian, uint16(14))
+	_ = binary.Write(&buf, binary.LittleEndian, uint16(BIFFRecordNumber))
+	_ = binary.Write(&buf, binary.LittleEndian, uint16(biffNumberPayloadLen))
 	_ = binary.Write(&buf, binary.LittleEndian, row)
 	_ = binary.Write(&buf, binary.LittleEndian, col)
-	_ = binary.Write(&buf, binary.LittleEndian, uint16(0))
+	_ = binary.Write(&buf, binary.LittleEndian, biffDefaultXFIndex)
 	_ = binary.Write(&buf, binary.LittleEndian, v)
 	return buf.Bytes()
 }

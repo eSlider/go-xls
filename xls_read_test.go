@@ -69,7 +69,7 @@ func TestReadXLSToMaps(t *testing.T) {
 }
 
 func TestReadXLS_OLERejected(t *testing.T) {
-	b := []byte{0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1}
+	b := append(append([]byte{}, oleCFBHeaderPrefix[:]...), 0xA1, 0xB1, 0x1A, 0xE1)
 	_, err := ReadXLS(bytes.NewReader(b), true)
 	if err == nil {
 		t.Fatal("expected error")
@@ -151,12 +151,12 @@ func TestIso88591RoundTrip(t *testing.T) {
 
 func TestReadXLS_StreamWithoutEOF(t *testing.T) {
 	var buf bytes.Buffer
-	writeU16LE(&buf, 0x809)
-	writeU16LE(&buf, 0x8)
-	writeU16LE(&buf, 0)
-	writeU16LE(&buf, 0x10)
-	writeU16LE(&buf, 0)
-	writeU16LE(&buf, 0)
+	writeU16LE(&buf, BIFFRecordBOF)
+	writeU16LE(&buf, biffBOFRecordDataLen)
+	writeU16LE(&buf, biffBOFVersionMinor)
+	writeU16LE(&buf, biffBOFVersionMajor)
+	writeU16LE(&buf, biffBOFReserved0)
+	writeU16LE(&buf, biffBOFReserved1)
 	_, err := ReadXLS(bytes.NewReader(buf.Bytes()), true)
 	if err != nil {
 		t.Fatal(err)

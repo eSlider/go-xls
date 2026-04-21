@@ -10,7 +10,7 @@ import (
 )
 
 // WriteXLS writes a legacy binary .xls workbook as a linear little-endian BIFF record stream
-// (BOF 0x809, LABEL-style strings 0x204, IEEE doubles 0x203, EOF 0x0A). It is not an OLE compound file.
+// ([BIFFRecordBOF], [BIFFRecordString], [BIFFRecordNumber], [BIFFRecordEOF]). It is not an OLE compound file.
 func WriteXLS(w io.Writer, tab Table, detectHead bool) error {
 	tab = normalizeTable(tab)
 
@@ -21,8 +21,15 @@ func WriteXLS(w io.Writer, tab Table, detectHead bool) error {
 		return err
 	}
 
-	// BOF
-	for _, v := range []uint16{0x809, 0x8, 0, 0x10, 0, 0} {
+	// BOF: record type + declared payload length, then fixed minimal version words (see xls_biff.go).
+	for _, v := range []uint16{
+		BIFFRecordBOF,
+		biffBOFRecordDataLen,
+		biffBOFVersionMinor,
+		biffBOFVersionMajor,
+		biffBOFReserved0,
+		biffBOFReserved1,
+	} {
 		if err := writeU16(v); err != nil {
 			return err
 		}
@@ -64,10 +71,10 @@ func WriteXLS(w io.Writer, tab Table, detectHead bool) error {
 		rowNum++
 	}
 
-	if err := writeU16(0x0A); err != nil {
+	if err := writeU16(BIFFRecordEOF); err != nil {
 		return err
 	}
-	return writeU16(0)
+	return writeU16(biffEOFRecordDataLen)
 }
 
 func encodeXLSCell(row, col uint16, raw string) ([]byte, error) {
@@ -87,11 +94,11 @@ func encodeXLSCell(row, col uint16, raw string) ([]byte, error) {
 
 func encodeXLSNumberCell(row, col uint16, v float64) []byte {
 	var buf bytes.Buffer
-	writeU16LE(&buf, XLSIntType)
-	writeU16LE(&buf, 14)
+	writeU16LE(&buf, BIFFRecordNumber)
+	writeU16LE(&buf, biffNumberPayloadLen)
 	writeU16LE(&buf, row)
 	writeU16LE(&buf, col)
-	writeU16LE(&buf, 0)
+	writeU16LE(&buf, biffDefaultXFIndex)
 	_ = binary.Write(&buf, binary.LittleEndian, v)
 	return buf.Bytes()
 }
@@ -103,11 +110,11 @@ func encodeXLSStringCell(row, col uint16, s string) ([]byte, error) {
 	}
 	l := len(b)
 	var buf bytes.Buffer
-	writeU16LE(&buf, XLSStringType)
-	writeU16LE(&buf, uint16(8+l))
+	writeU16LE(&buf, BIFFRecordString)
+	writeU16LE(&buf, uint16(biffStringHeaderBytes+l))
 	writeU16LE(&buf, row)
 	writeU16LE(&buf, col)
-	writeU16LE(&buf, 0)
+	writeU16LE(&buf, biffDefaultXFIndex)
 	writeU16LE(&buf, uint16(l))
 	buf.Write(b)
 	return buf.Bytes(), nil

@@ -1,18 +1,13 @@
 package xls
 
 import (
+	"bytes"
 	"encoding/binary"
 	"errors"
 	"fmt"
 	"io"
 	"math"
 	"strconv"
-)
-
-// BIFF record types for the linear stream read by [ReadXLS].
-const (
-	biffBOF = 0x809 // LE bytes 09 08
-	biffEOF = 0x0A
 )
 
 const (
@@ -44,7 +39,7 @@ func ReadXLS(r io.Reader, firstRowAsHeader bool) (Table, error) {
 	if err != nil {
 		return Table{}, err
 	}
-	if len(b) >= 4 && b[0] == 0xD0 && b[1] == 0xCF && b[2] == 0x11 && b[3] == 0xE0 {
+	if len(b) >= len(oleCFBHeaderPrefix) && bytes.HasPrefix(b, oleCFBHeaderPrefix[:]) {
 		return Table{}, ErrOLEWorkbook
 	}
 
@@ -112,9 +107,9 @@ func decodeXLSStream(b []byte) ([]sparseCell, error) {
 		off += reclen
 
 		switch typ {
-		case biffBOF:
+		case BIFFRecordBOF:
 			// ignore BOF payload
-		case biffEOF:
+		case BIFFRecordEOF:
 			if reclen != 0 {
 				return nil, fmt.Errorf("xls: unexpected EOF payload length %d", reclen)
 			}
@@ -122,7 +117,7 @@ func decodeXLSStream(b []byte) ([]sparseCell, error) {
 				return nil, fmt.Errorf("xls: %d trailing bytes after EOF", len(b)-off)
 			}
 			return cells, nil
-		case XLSStringType:
+		case BIFFRecordString:
 			c, err := parseStringRecord(payload)
 			if err != nil {
 				return nil, err
@@ -131,7 +126,7 @@ func decodeXLSStream(b []byte) ([]sparseCell, error) {
 			if len(cells) > maxXLSCells {
 				return nil, fmt.Errorf("xls: too many cells (> %d)", maxXLSCells)
 			}
-		case XLSIntType:
+		case BIFFRecordNumber:
 			c, err := parseNumberRecord(payload)
 			if err != nil {
 				return nil, err
@@ -154,27 +149,27 @@ func decodeXLSStream(b []byte) ([]sparseCell, error) {
 }
 
 func parseStringRecord(payload []byte) (sparseCell, error) {
-	if len(payload) < 8 {
+	if len(payload) < biffStringHeaderBytes {
 		return sparseCell{}, fmt.Errorf("xls: string record payload too short (%d)", len(payload))
 	}
 	row := binary.LittleEndian.Uint16(payload[0:2])
 	col := binary.LittleEndian.Uint16(payload[2:4])
 	strLen := int(binary.LittleEndian.Uint16(payload[6:8]))
-	if 8+strLen != len(payload) {
+	if biffStringHeaderBytes+strLen != len(payload) {
 		return sparseCell{}, fmt.Errorf("xls: string record length mismatch (declared %d, payload %d)", strLen, len(payload))
 	}
-	raw := payload[8:]
+	raw := payload[biffStringHeaderBytes:]
 	s := iso88591BytesToString(raw)
 	return sparseCell{row: row, col: col, text: s}, nil
 }
 
 func parseNumberRecord(payload []byte) (sparseCell, error) {
-	if len(payload) != 14 {
-		return sparseCell{}, fmt.Errorf("xls: number record expected 14-byte payload, got %d", len(payload))
+	if len(payload) != biffNumberPayloadLen {
+		return sparseCell{}, fmt.Errorf("xls: number record expected %d-byte payload, got %d", biffNumberPayloadLen, len(payload))
 	}
 	row := binary.LittleEndian.Uint16(payload[0:2])
 	col := binary.LittleEndian.Uint16(payload[2:4])
-	v := math.Float64frombits(binary.LittleEndian.Uint64(payload[6:14]))
+	v := math.Float64frombits(binary.LittleEndian.Uint64(payload[biffNumberValueOffset:biffNumberPayloadLen]))
 	if math.IsNaN(v) || math.IsInf(v, 0) {
 		return sparseCell{}, fmt.Errorf("xls: invalid numeric cell")
 	}

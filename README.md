@@ -39,7 +39,7 @@ if err := xls.WriteXLS(&buf, tab, true); err != nil {
 
 ## Read legacy `.xls`
 
-Linear BIFF only (BOF `0x809`, string `0x204`, number `0x203`, EOF `0x0A`). OLE compound workbooks (`D0 CF 11 E0 …`) return `xls.ErrOLEWorkbook` — use another reader for those files.
+Linear BIFF only (record types `BIFFRecordBOF`, `BIFFRecordString`, `BIFFRecordNumber`, `BIFFRecordEOF` in [package documentation](https://pkg.go.dev/github.com/eslider/go-xls/v2#pkg-constants)). OLE compound workbooks (magic `D0 CF 11 E0 …`) return `xls.ErrOLEWorkbook` — use another reader for those files.
 
 ```go
 tab, err := xls.ReadXLS(bytes.NewReader(buf.Bytes()), true)
