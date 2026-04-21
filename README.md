@@ -4,14 +4,17 @@
 [![Go Reference](https://pkg.go.dev/badge/github.com/eSlider/go-xls.svg)](https://pkg.go.dev/github.com/eSlider/go-xls)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Go](https://img.shields.io/badge/Go-1.22+-00ADD8.svg)](https://go.dev)
+[![Latest Release](https://img.shields.io/github/v/tag/eSlider/go-xls?sort=semver&label=release)](https://github.com/eSlider/go-xls/releases)
 
 Small, **`io.Writer` / `io.Reader`–first** helpers for tabular data: UTF‑16LE CSV (BOM + `sep=`), legacy binary **.xls** (linear BIFF), **.xlsx** via [excelize](https://github.com/xuri/excelize), GitHub-style **markdown pipe tables**, and optional HTTP attachment headers.
 
 ## Install
 
 ```bash
-go get github.com/eSlider/go-xls
+go get github.com/eSlider/go-xls@v1.0.0
 ```
+
+The string **`xls.Version`** matches this release (`1.0.0`). Git tags use a `v` prefix (`v1.0.0`); keep the const and tag in sync when publishing.
 
 ## Write legacy `.xls`
 
@@ -70,6 +73,8 @@ _ = parsed
 Alignment round-trip: `WriteMarkdownTableWith` + `ReadMarkdownTableDetailed` + `MarkdownMarshalOpts{Align: …}`.
 
 ## HTTP attachment
+
+(`bytes` and `net/http` imports omitted.)
 
 ```go
 body := bytes.NewReader(buf.Bytes())
