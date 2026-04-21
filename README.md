@@ -5,7 +5,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Go](https://img.shields.io/badge/Go-1.22+-00ADD8.svg)](https://go.dev)
 
-Small Go library for **CSV**, legacy **.xls** (BIFF), and **.xlsx** export, ported from Mapbender’s [`ExportResponse.php`](https://github.com/mapbender/mapbender/blob/master/src/FOM/CoreBundle/Component/ExportResponse.php) (`FOM\CoreBundle\Component\ExportResponse`). It focuses on the same wire formats and HTTP headers used there: UTF‑16LE CSV with BOM and `sep=`, hand-written BIFF cells for `.xls`, and OpenXML `.xlsx` via [excelize](https://github.com/xuri/excelize).
+Small Go library for **CSV**, legacy **.xls** (BIFF), and **.xlsx** export (and **reading** those linear `.xls` streams), ported from Mapbender’s [`ExportResponse.php`](https://github.com/mapbender/mapbender/blob/master/src/FOM/CoreBundle/Component/ExportResponse.php) (`FOM\CoreBundle\Component\ExportResponse`). It focuses on the same wire formats and HTTP headers used there: UTF‑16LE CSV with BOM and `sep=`, hand-written BIFF cells for `.xls`, and OpenXML `.xlsx` via [excelize](https://github.com/xuri/excelize).
 
 ## Install
 
@@ -55,6 +55,14 @@ func main() {
 	}
 	_ = os.WriteFile("export.xlsx", xlsx, 0o644)
 
+	// Read back the same Mapbender-style .xls (first row → column names).
+	if _, err := xls.ParseXLS(bin, true); err != nil {
+		panic(err)
+	}
+	if _, err := xls.ParseXLSToMaps(bin); err != nil {
+		panic(err)
+	}
+
 	// HTTP attachment (Symfony-style headers from Mapbender).
 	_ = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, _ := xls.GenXLS(tab, true)
@@ -62,6 +70,12 @@ func main() {
 	})
 }
 ```
+
+## Reading `.xls`
+
+- **`ParseXLS(b, firstRowAsHeader)`** walks the **linear BIFF record stream** produced by `GenXLS` (BOF `0x809`, `0x204` string cells, `0x203` IEEE doubles, EOF `0x0A`).
+- **`ParseXLSToMaps(b)`** is shorthand for `ParseXLS(b, true)` then each data row as `map[string]string` (duplicate header names: last column wins).
+- **OLE workbooks** (typical Excel 97 `.xls` with magic `D0 CF 11 E0`) return `ErrOLEWorkbook`. Tools such as [northbright/xls2csv-go](https://github.com/northbright/xls2csv-go) use **libxls** for that container; this package intentionally matches only the Mapbender/minimal writer stream.
 
 ## Behaviour notes
 
