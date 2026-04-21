@@ -1,24 +1,28 @@
 # go-xls
 
 [![CI](https://github.com/eSlider/go-xls/actions/workflows/ci.yml/badge.svg)](https://github.com/eSlider/go-xls/actions/workflows/ci.yml)
-[![Go Reference](https://pkg.go.dev/badge/github.com/eSlider/go-xls.svg)](https://pkg.go.dev/github.com/eSlider/go-xls)
+[![Go Reference](https://pkg.go.dev/badge/github.com/eSlider/go-xls/v2.svg)](https://pkg.go.dev/github.com/eSlider/go-xls/v2)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Go](https://img.shields.io/badge/Go-1.22+-00ADD8.svg)](https://go.dev)
 [![Latest Release](https://img.shields.io/github/v/tag/eSlider/go-xls?sort=semver&label=release)](https://github.com/eSlider/go-xls/releases)
 
-Small, **`io.Writer` / `io.Reader`–first** helpers for tabular data: UTF‑16LE CSV (BOM + `sep=`), legacy binary **.xls** (linear BIFF), **.xlsx** via [excelize](https://github.com/xuri/excelize), GitHub-style **markdown pipe tables**, and optional HTTP attachment headers.
+Small, **`io.Writer` / `io.Reader`–first** helpers for tabular data: UTF‑16LE CSV (BOM + `sep=`), legacy binary **.xls** (linear BIFF), GitHub-style **markdown pipe tables**, and optional HTTP attachment headers.
 
 ## Install
 
 ```bash
-go get github.com/eSlider/go-xls@v1.0.0
+go get github.com/eSlider/go-xls/v2@v2.0.0
 ```
 
-The string **`xls.Version`** matches this release (`1.0.0`). Git tags use a `v` prefix (`v1.0.0`); keep the const and tag in sync when publishing.
+The string **`xls.Version`** matches this release (`2.0.0`). Git tags use a `v` prefix (`v2.0.0`); keep the const and tag in sync when publishing.
+
+**Module path:** `github.com/eSlider/go-xls/v2` (Go semantic import versioning for v2+).
 
 ## Write legacy `.xls`
 
 ```go
+import "github.com/eSlider/go-xls/v2"
+
 tab := xls.Table{
 	Columns: []string{"name", "qty"},
 	Rows:    [][]string{{"apple", "3"}},
@@ -31,7 +35,7 @@ if err := xls.WriteXLS(&buf, tab, true); err != nil {
 
 ## Read legacy `.xls`
 
-Linear BIFF only (BOF `0x809`, string `0x204`, number `0x203`, EOF `0x0A`). OLE compound workbooks (`D0 CF 11 E0 …`) return `xls.ErrOLEWorkbook` — use another reader or convert to `.xlsx`.
+Linear BIFF only (BOF `0x809`, string `0x204`, number `0x203`, EOF `0x0A`). OLE compound workbooks (`D0 CF 11 E0 …`) return `xls.ErrOLEWorkbook` — use another reader for those files.
 
 ```go
 tab, err := xls.ReadXLS(bytes.NewReader(buf.Bytes()), true)
@@ -47,15 +51,6 @@ _ = maps
 ```go
 var out bytes.Buffer
 err := xls.WriteCSV(&out, tab, ",", `"`, "UTF-8", true)
-```
-
-## Write `.xlsx`
-
-```go
-var out bytes.Buffer
-if err := xls.WriteXLSX(&out, tab, true); err != nil {
-	log.Fatal(err)
-}
 ```
 
 ## Markdown pipe tables

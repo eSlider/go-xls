@@ -22,7 +22,7 @@ const (
 
 var (
 	// ErrOLEWorkbook means the input is an OLE compound document (.xls as produced by Excel 97).
-	// [ReadXLS] only supports the linear BIFF stream from [WriteXLS]; use another tool or convert to .xlsx.
+	// [ReadXLS] only supports the linear BIFF stream from [WriteXLS]; use another tool for OLE workbooks.
 	ErrOLEWorkbook = errors.New("xls: OLE compound workbook not supported (linear BIFF stream only)")
 	// ErrTruncatedXLS means the stream ended inside a BIFF record.
 	ErrTruncatedXLS = errors.New("xls: truncated record")

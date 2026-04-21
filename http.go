@@ -9,9 +9,8 @@ import (
 
 // MIME-style content types for tabular downloads.
 const (
-	ContentTypeCSV  = "text/csv;charset=UTF-16LE"
-	ContentTypeXLS  = "application/vnd.ms-excel"
-	ContentTypeXLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+	ContentTypeCSV = "text/csv;charset=UTF-16LE"
+	ContentTypeXLS = "application/vnd.ms-excel"
 )
 
 // EnableDownloadHeaders sets Cache-Control, Pragma, and Expires for attachment responses.

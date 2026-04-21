@@ -2,9 +2,8 @@ package xls
 
 // Format identifiers for helpers and documentation.
 const (
-	TypeCSV  = "csv"
-	TypeXLS  = "xls"
-	TypeXLSX = "xlsx"
+	TypeCSV = "csv"
+	TypeXLS = "xls"
 )
 
 // BIFF legacy cell record types (binary .xls subset).

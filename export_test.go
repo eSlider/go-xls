@@ -8,8 +8,6 @@ import (
 	"strings"
 	"testing"
 	"unicode/utf16"
-
-	"github.com/xuri/excelize/v2"
 )
 
 func TestWriteXLS_Empty(t *testing.T) {
@@ -163,40 +161,5 @@ func TestWriteAttachment(t *testing.T) {
 	}
 	if string(out) != "abc" {
 		t.Fatalf("body=%q", out)
-	}
-}
-
-func TestWriteXLSX_Smoke(t *testing.T) {
-	tab := Table{
-		Columns: []string{"name"},
-		Rows:    [][]string{{"value"}},
-	}
-	var buf bytes.Buffer
-	if err := WriteXLSX(&buf, tab, true); err != nil {
-		t.Fatal(err)
-	}
-	b := buf.Bytes()
-	if !bytes.HasPrefix(b, []byte("PK")) {
-		t.Fatalf("expected zip/xlsx signature")
-	}
-	f, err := excelize.OpenReader(bytes.NewReader(b))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() { _ = f.Close() }()
-	sheet := f.GetSheetName(0)
-	v, err := f.GetCellValue(sheet, "A1")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if v != "name" {
-		t.Fatalf("A1=%q want name", v)
-	}
-	v, err = f.GetCellValue(sheet, "A2")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if v != "value" {
-		t.Fatalf("A2=%q want value", v)
 	}
 }
