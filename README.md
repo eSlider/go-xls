@@ -12,24 +12,6 @@ If those pages show *Not Found* right after a release, wait a few minutes for pk
 
 Small, **`io.Writer` / `io.Reader`–first** helpers for tabular data: UTF‑16LE CSV (BOM + `sep=`), legacy binary **.xls** (linear BIFF), GitHub-style **markdown pipe tables**, and optional HTTP attachment headers.
 
-## pkg.go.dev
-
-Documentation follows [Adding a package](https://pkg.go.dev/about#adding-a-package): the site pulls from [proxy.golang.org](https://proxy.golang.org/). This repo satisfies the usual requirements:
-
-| Requirement | This module |
-|-------------|-------------|
-| **`go.mod`** at the module root | Yes (`go.mod`) |
-| **Redistributable license** | [MIT `LICENSE`](LICENSE) (see [license policy](https://pkg.go.dev/license-policy)) |
-| **Tagged semver releases** | Git tags `v2.x.y`; stable **v2** per [Go modules v2+](https://go.dev/blog/v2-go-modules) |
-
-To **add or refresh** a version on pkg.go.dev after you push a tag, use any one of these (per the [official how-to](https://pkg.go.dev/about#adding-a-package)):
-
-1. **`go get`** (simplest): `GOPROXY=https://proxy.golang.org GO111MODULE=on go get github.com/eslider/go-xls/v2@v2.1.0`
-2. **Proxy `.info` URL** (Module proxy protocol): `https://proxy.golang.org/github.com/eslider/go-xls/v2/@v/v2.1.0.info`
-3. **Request button** in the browser on the [module](https://pkg.go.dev/github.com/eslider/go-xls) or [package](https://pkg.go.dev/github.com/eslider/go-xls/v2) page, if the UI offers it.
-
-New versions are picked up from [index.golang.org](https://index.golang.org/) within a few minutes. For writing docs, follow [Godoc documenting Go code](https://go.dev/blog/godoc) (the first sentence of the package comment is what search indexes).
-
 ## Install
 
 ```bash
